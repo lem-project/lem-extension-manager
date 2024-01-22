@@ -1,4 +1,4 @@
 (defsystem "lem-extension-manager"
-  :depends-on ("ultralisp-client")
+  :depends-on ()
   :serial t
   :components ((:file "main")))
