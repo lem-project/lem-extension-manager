@@ -1,11 +1,11 @@
-(defpackage :lem/simple-package
+(defpackage :lem-extension-manager
   (:use :cl :lem)
   (:export :*installed-packages*
            :*packages-directory*
            :lem-use-package
            :load-packages))
 
-(in-package :lem/simple-package)
+(in-package :lem-extension-manager)
 
 (defvar *installed-packages* nil)
 
@@ -134,7 +134,7 @@
 
 (defun %register-maybe-quickload (name)
   (uiop:symbol-call :quicklisp :register-local-projects)
-  (maybe-quickload (alexandria:make-keyword name) :silent t))
+  (maybe-load-systems (alexandria:make-keyword name) :silent t))
 
 (defun %download-package (source name)
   (message "Downloading ~a..." name)
@@ -187,7 +187,7 @@
                              :name spackage
                              :source (make-local :name spackage)
                              :directory dpackage))
-          do (maybe-quickload (alexandria:make-keyword spackage) :silent t))))
+          do (maybe-load-systems (alexandria:make-keyword spackage) :silent t))))
 
 (defun %select-ql-package ()
   (let* ((packages (mapcar #'ql-dist:project-name
@@ -197,7 +197,7 @@
                        (lambda (string)
                          (completion string packages)))))
 
-(define-command sp-test-ql-package () ()
+(define-command extension-manager-test-ql-package () ()
   (alexandria:if-let ((lpackage (%select-ql-package)))
     (progn (package-test
             (make-instance 'simple-package
@@ -205,13 +205,13 @@
                            :source (make-quicklisp :name lpackage))))
     (editor-error "There was an error loading ~a!" lpackage)))
 
-(define-command sp-install-ql-package () ()
+(define-command extension-manager-install-ql-package () ()
   (let* ((lpackage (%select-ql-package)))
 
     (lem-use-package lpackage :source '(:type :quicklisp))
     (message "Package ~a installed!" lpackage)))
 
-(define-command sp-remove-package () ()
+(define-command extension-manager-remove-package () ()
   (if *installed-packages*
       (let* ((packages (and *installed-packages*
                             (mapcar #'simple-package-name
@@ -230,7 +230,7 @@
       (message "No packages installed!")))
 
 
-(define-command sp-purge-packages () ()
+(define-command extension-manager-purge-packages () ()
   (let* ((plist (packages-list))
         (extra-packages
           (set-difference
