@@ -1,5 +1,5 @@
 (defpackage :lem-extension-manager
-  (:use :cl :lem)
+  (:use :cl :uiop)
   (:export :*installed-packages*
            :*packages-directory*
            :lem-use-package
@@ -9,9 +9,36 @@
 
 (defvar *installed-packages* nil)
 
+(defun url-not-suitable-error-p (condition)
+  (<= 400 (ql-http:unexpected-http-status-code condition) 499))
+
+(defun fetch-gzipped-version (url file &key quietly)
+  (let ((gzipped-temp (merge-pathnames "gzipped.tmp" file)))
+    (ql-http:fetch url gzipped-temp :quietly quietly)
+    (ql-gunzipper:gunzip gzipped-temp file)
+    (delete-file-if-exists gzipped-temp)
+    (probe-file file)))
+
+(defun maybe-fetch-tgzipped (url file &key quietly)
+  (handler-case
+      (fetch-gzipped-version url file :quietly quietly)
+    (ql-http:unexpected-http-status (condition)
+      (cond ((url-not-suitable-error-p condition)
+             (ql-http:fetch url file :quietly quietly)
+             (probe-file file))
+            (t
+             (error condition))))))
+
+(defun default-home ()
+  (let ((xdg-lem (uiop:xdg-config-home "lem/"))
+        (dot-lem (merge-pathnames ".lem/" (user-homedir-pathname))))
+    (or (uiop:getenv "LEM_HOME")
+        (and (probe-file dot-lem) dot-lem)
+        xdg-lem)))
+
 (defvar *packages-directory*
   (pathname (str:concat
-             (directory-namestring (lem-home))
+             (directory-namestring (default-home))
              "packages"
              (string  (uiop:directory-separator-for-host)))))
 
@@ -60,22 +87,18 @@
                        :test #'string=))
          (url (ql-dist:archive-url release))
          (name (source-name source))
-         (tgzfile (str:concat name ".tgz"))
          (tarfile (str:concat name ".tar")))
     (if release
         (prog1 output-dir
           (uiop:with-current-directory (*packages-directory*)
-            (quicklisp-client::maybe-fetch-gzipped url tgzfile
-                                                   :quietly t)
-            (ql-gunzipper:gunzip tgzfile tarfile)
+            (maybe-fetch-tgzipped url tarfile :quietly t)
             (ql-minitar:unpack-tarball tarfile)
-            (delete-file tgzfile)
             (delete-file tarfile)
             (uiop/cl:rename-file (ql-dist:prefix release) output-location)))
-        (editor-error "Package ~a not found!." (source-name source)))))
+        (error "Package ~a not found!." (source-name source)))))
 
 (defmethod download-source (source output-location)
-  (editor-error "Source ~a not available." source))
+  (error "Source ~a not available." source))
 
 (defclass simple-package ()
   ((name :initarg :name
@@ -130,21 +153,23 @@
            source-list
          (declare (ignore type))
          (make-quicklisp :name name)))
-      (t (editor-error "Source ~a not available." s)))))
+      (t (error "Source ~a not available." s)))))
 
 (defun %register-maybe-quickload (name)
   (uiop:symbol-call :quicklisp :register-local-projects)
-  (maybe-load-systems (alexandria:make-keyword name) :silent t))
+  (ql:quickload (alexandria:make-keyword name) :silent t))
 
 (defun %download-package (source name)
-  (message "Downloading ~a..." name)
+  (format t "Downloading ~a..." name)
   (download-source source name)
-  (message "Done downloading ~a!" name))
+  (format t "Done downloading ~a!" name))
 
 ;; git source (list :type type :url url :branch branch :commit commit)
 (defmacro lem-use-package (name &key source after
                                  bind hooks force)
   (declare (ignore hooks bind after))
+  #+sbcl
+  (ensure-directories-exist *packages-directory*)
   (alexandria:with-gensyms (spackage rsource pdir)
     `(let* ((asdf:*central-registry*
                 (union (packages-list)
@@ -187,63 +212,63 @@
                              :name spackage
                              :source (make-local :name spackage)
                              :directory dpackage))
-          do (maybe-load-systems (alexandria:make-keyword spackage) :silent t))))
+          do (ql:quickload (alexandria:make-keyword spackage) :silent t))))
 
-(defun %select-ql-package ()
-  (let* ((packages (mapcar #'ql-dist:project-name
-                           *quicklisp-system-list*)))
-    (prompt-for-string "Select package: "
-                       :completion-function
-                       (lambda (string)
-                         (completion string packages)))))
+;; (defun %select-ql-package ()
+;;   (let* ((packages (mapcar #'ql-dist:project-name
+;;                            *quicklisp-system-list*)))
+;;     (prompt-for-string "Select package: "
+;;                        :completion-function
+;;                        (lambda (string)
+;;                          (completion string packages)))))
 
-(define-command extension-manager-test-ql-package () ()
-  (alexandria:if-let ((lpackage (%select-ql-package)))
-    (progn (package-test
-            (make-instance 'simple-package
-                           :name lpackage
-                           :source (make-quicklisp :name lpackage))))
-    (editor-error "There was an error loading ~a!" lpackage)))
+;; (define-command extension-manager-test-ql-package () ()
+;;   (alexandria:if-let ((lpackage (%select-ql-package)))
+;;     (progn (package-test
+;;             (make-instance 'simple-package
+;;                            :name lpackage
+;;                            :source (make-quicklisp :name lpackage))))
+;;     (editor-error "There was an error loading ~a!" lpackage)))
 
-(define-command extension-manager-install-ql-package () ()
-  (let* ((lpackage (%select-ql-package)))
+;; (define-command extension-manager-install-ql-package () ()
+;;   (let* ((lpackage (%select-ql-package)))
 
-    (lem-use-package lpackage :source '(:type :quicklisp))
-    (message "Package ~a installed!" lpackage)))
+;;     (lem-use-package lpackage :source '(:type :quicklisp))
+;;     (message "Package ~a installed!" lpackage)))
 
-(define-command extension-manager-remove-package () ()
-  (if *installed-packages*
-      (let* ((packages (and *installed-packages*
-                            (mapcar #'simple-package-name
-                                    *installed-packages*)))
-             (rpackage
-               (prompt-for-string "Select package: "
-                                  :completion-function
-                                  (lambda (string)
-                                    (completion string packages)))))
-        (package-remove
-         (find rpackage *installed-packages*
-               :key #'simple-package-name
-               :test #'string=))
-        (message "Package remove from system!"))
+;; (define-command extension-manager-remove-package () ()
+;;   (if *installed-packages*
+;;       (let* ((packages (and *installed-packages*
+;;                             (mapcar #'simple-package-name
+;;                                     *installed-packages*)))
+;;              (rpackage
+;;                (prompt-for-string "Select package: "
+;;                                   :completion-function
+;;                                   (lambda (string)
+;;                                     (completion string packages)))))
+;;         (package-remove
+;;          (find rpackage *installed-packages*
+;;                :key #'simple-package-name
+;;                :test #'string=))
+;;         (message "Package remove from system!"))
 
-      (message "No packages installed!")))
+;;       (message "No packages installed!")))
 
 
-(define-command extension-manager-purge-packages () ()
-  (let* ((plist (packages-list))
-        (extra-packages
-          (set-difference
-           (mapcar (lambda (p)
-                     (first (last (pathname-directory p))))
-                   plist)
-           (mapcar #'simple-package-name *installed-packages*)
-           :test #'string=)))
-    (loop for e in extra-packages
-          for dir = (find e plist
-                          :key (lambda (p) (first (last (pathname-directory p))))
-                          :test #'string=)
-          do (and (uiop:directory-exists-p dir)
-              (uiop:delete-directory-tree
-                    (uiop:truename* dir)
-                    :validate t)))))
+;; (define-command extension-manager-purge-packages () ()
+;;   (let* ((plist (packages-list))
+;;         (extra-packages
+;;           (set-difference
+;;            (mapcar (lambda (p)
+;;                      (first (last (pathname-directory p))))
+;;                    plist)
+;;            (mapcar #'simple-package-name *installed-packages*)
+;;            :test #'string=)))
+;;     (loop for e in extra-packages
+;;           for dir = (find e plist
+;;                           :key (lambda (p) (first (last (pathname-directory p))))
+;;                           :test #'string=)
+;;           do (and (uiop:directory-exists-p dir)
+;;               (uiop:delete-directory-tree
+;;                     (uiop:truename* dir)
+;;                     :validate t)))))
