@@ -3,7 +3,17 @@
   (:export :*installed-packages*
            :*packages-directory*
            :lem-use-package
-           :load-packages))
+           :load-packages
+           ;; For user commands
+           :package-test
+           :make-quicklisp
+           :package-remove
+           :packages-list
+
+           :simple-package
+           :simple-package-name
+           :simple-package-source
+           :simple-package-directory))
 
 (in-package :lem-extension-manager)
 
