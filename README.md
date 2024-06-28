@@ -15,11 +15,11 @@ To use this function, we can modify our `init.lisp` file in this way:
 ```lisp
 (lem-extension-manager:lem-use-package
  "lisp-critic"
- :source '(:type :git
+ :source (:type :git
            :url "https://github.com/g000001/lisp-critic.git"))
 		   
 (lem-extension-manager:lem-use-package "versioned-objects"
-                 :source '(:type :git
+                 :source (:type :git
                            :url "https://github.com/smithzvk/Versioned-Objects.git"
                            :branch "advance-versioning"))
 ```
@@ -29,6 +29,19 @@ To use this function, we can modify our `init.lisp` file in this way:
 
 (lem-extension-manager:lem-use-package "fiveam" :source (:type :quicklisp))
 
+```
+
+It's also possible to recursive dependenices that are not on quicklisp (for example, other github packages), using the `:dependencies` keyword:
+```lisp
+(lem-extension-manager:lem-use-package "versioned-objects"
+                                       :source (:type :git
+                                                :url "https://github.com/smithzvk/Versioned-Objects.git"
+                                                :branch "advance-versioning")
+                                       :dependencies (("ip-management"
+                                                       :source
+                                                       (:type :git
+                                                        :url "https://github.com/Sasanidas/ip-management.git"))
+                                                      ("1am" :source (:type :quicklisp))))
 ```
 
 ### Interactive commands

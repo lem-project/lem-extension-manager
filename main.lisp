@@ -90,11 +90,11 @@
 
 (defmethod download-source ((source quicklisp) (output-location String))
   (let* ((output-dir (str:concat
-                     (namestring *packages-directory*) output-location))
+                      (namestring *packages-directory*) output-location))
          (release (find (source-name source)
-                       *quicklisp-system-list*
-                       :key #'ql-dist:project-name
-                       :test #'string=))
+                        *quicklisp-system-list*
+                        :key #'ql-dist:project-name
+                        :test #'string=))
          (url (ql-dist:archive-url release))
          (name (source-name source))
          (tarfile (str:concat name ".tar")))
@@ -174,38 +174,51 @@
   (download-source source name)
   (format t "Done downloading ~a!" name))
 
-;; git source (list :type type :url url :branch branch :commit commit)
+#|
+
+git source: (list :type type :url url :branch branch :commit commit :dependecies dependencie-list)
+
+dependency: (("versioned-objects" :source
+
+(lem-use-package "versioned-objects"
+:source (:type :git
+:url "https://github.com/smithzvk/Versioned-Objects.git"
+:branch "advance-versioning"))
+
+
+Quicklisp can take care of the dependencies
+(lem-use-package "fiveam" :source (:type :quicklisp))
+
+|#
 (defmacro lem-use-package (name &key source after
-                                 bind hooks force)
+                                     bind hooks
+                                     force dependencies)
   (declare (ignore hooks bind after))
   #+sbcl
   (ensure-directories-exist *packages-directory*)
   (alexandria:with-gensyms (spackage rsource pdir)
     `(let* ((asdf:*central-registry*
-                (union (packages-list)
-                       asdf:*central-registry*
-                       :test #'equal))
-              (ql:*local-project-directories*
-                (nconc (list *packages-directory*)
-                       ql:*local-project-directories*))
-              (,rsource (define-source ,source ,name))
-              (,pdir (merge-pathnames *packages-directory* ,name))
-              (,spackage (make-instance 'simple-package
-                                        :name ,name
-                                        :source ,rsource
-                                        :directory ,pdir)))
-         (when (or ,force
-                   (not (uiop:directory-exists-p ,pdir)))
-           (%download-package ,rsource ,name))
-         (insert-package ,spackage)
+              (union (packages-list)
+                     asdf:*central-registry*
+                     :test #'equal))
+            (ql:*local-project-directories*
+              (nconc (list *packages-directory*)
+                     ql:*local-project-directories*))
+            (,rsource (define-source ',source ,name))
+            (,pdir (merge-pathnames *packages-directory* ,name))
+            (,spackage (make-instance 'simple-package
+                                      :name ,name
+                                      :source ,rsource
+                                      :directory ,pdir)))
+       (when (or ,force
+                 (not (uiop:directory-exists-p ,pdir)))
+         (%download-package ,rsource ,name))
+       ,(when dependencies
+          (loop for dep in dependencies
+                do (eval `(lem-use-package ,@dep))))
+       (insert-package ,spackage)
        (and (%register-maybe-quickload ,name) t))))
 
-;(lem-use-package "versioned-objects"
-;                 :source '(:type :git
-;                           :url "https://github.com/smithzvk/Versioned-Objects.git"
-;                           :branch "advance-versioning"))
-
-;(lem-use-package "fiveam" :source (:type :quicklisp))
 
 ;; Package util functions/commands
 
