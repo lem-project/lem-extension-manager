@@ -10,10 +10,10 @@
            :package-remove
            :packages-list
 
-           :simple-package
-           :simple-package-name
-           :simple-package-source
-           :simple-package-directory))
+           :extension
+           :extension-name
+           :extension-source
+           :extension-directory))
 
 (in-package :lem-extension-manager)
 
@@ -110,30 +110,30 @@
 (defmethod download-source (source output-location)
   (error "Source ~a not available." source))
 
-(defclass simple-package ()
+(defclass extension ()
   ((name :initarg :name
-         :accessor simple-package-name)
+         :accessor extension-name)
    (source :initarg :source
-           :accessor simple-package-source)
+           :accessor extension-source)
    (directory :initarg :directory
-              :accessor simple-package-directory)))
+              :accessor extension-directory)))
 
 (defgeneric package-remove (package))
 
-(defmethod package-remove ((package simple-package))
+(defmethod package-remove ((package extension))
   (uiop:delete-directory-tree
-   (uiop:truename* (simple-package-directory package)) :validate t)
+   (uiop:truename* (extension-directory package)) :validate t)
   (delete package *installed-packages*))
 
 (defgeneric package-test (package))
 
-(defmethod package-test ((package simple-package))
+(defmethod package-test ((package extension))
   (let* ((*packages-directory* (uiop:temporary-directory))
          (ql:*local-project-directories* (list *packages-directory*))
-         (name (simple-package-name package))
-         (source (simple-package-source package)))
+         (name (extension-name package))
+         (source (extension-source package)))
     (%download-package source name)
-    (%register-maybe-quickload (simple-package-name package))))
+    (%register-maybe-quickload (extension-name package))))
 
 (defun packages-list ()
   (remove-duplicates
@@ -144,8 +144,8 @@
   (pushnew package *installed-packages*
            :test (lambda (a b)
                    (string=
-                    (simple-package-name a)
-                    (simple-package-name b)))))
+                    (extension-name a)
+                    (extension-name b)))))
 
 (defun define-source (source-list name)
   (let ((s (getf source-list :type)))
@@ -206,7 +206,7 @@ Quicklisp can take care of the dependencies
                      ql:*local-project-directories*))
             (,rsource (define-source ',source ,name))
             (,pdir (merge-pathnames *packages-directory* ,name))
-            (,spackage (make-instance 'simple-package
+            (,spackage (make-instance 'extension
                                       :name ,name
                                       :source ,rsource
                                       :directory ,pdir)))
@@ -231,7 +231,7 @@ Quicklisp can take care of the dependencies
                            (pathname-directory
                             (uiop:directorize-pathname-host-device dpackage))))
           do (insert-package
-              (make-instance 'simple-package
+              (make-instance 'extension
                              :name spackage
                              :source (make-local :name spackage)
                              :directory dpackage))
