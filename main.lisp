@@ -32,6 +32,14 @@
              "packages"
              (string  (uiop:directory-separator-for-host)))))
 
+(defstruct source name)
+
+(defstruct (local (:include source)))
+
+
+(defgeneric download-source (source output-location)
+  (:documentation "It downloads the SOURCE to the desired location."))
+
 (defvar *git-base-arglist* (list "git")
   "The git program, to be appended command-line options.")
 
