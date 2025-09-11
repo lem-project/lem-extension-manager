@@ -63,6 +63,38 @@
         (run-git (list "checkout" (git-commit source)))))
     output-dir))
 
+(defstruct (quicklisp (:include source)))
+
+(defvar *quicklisp-system-list*
+  (remove-duplicates
+   (mapcar #'ql-dist:release (ql:system-list))))
+
+(defmethod download-source ((source quicklisp) (output-location String))
+  (let* ((output-dir (str:concat
+                     (namestring *packages-directory*) output-location))
+         (release (find (source-name source)
+                       *quicklisp-system-list*
+                       :key #'ql-dist:project-name
+                       :test #'string=))
+         (url (ql-dist:archive-url release))
+         (name (source-name source))
+         (tgzfile (str:concat name ".tgz"))
+         (tarfile (str:concat name ".tar")))
+    (if release
+        (prog1 output-dir
+          (uiop:with-current-directory (*packages-directory*)
+            (quicklisp-client::maybe-fetch-gzipped url tgzfile
+                                                   :quietly t)
+            (ql-gunzipper:gunzip tgzfile tarfile)
+            (ql-minitar:unpack-tarball tarfile)
+            (delete-file tgzfile)
+            (delete-file tarfile)
+            (uiop/cl:rename-file (ql-dist:prefix release) output-location)))
+        (editor-error "Package ~a not found!." (source-name source)))))
+
+(defmethod download-source (source output-location)
+  (editor-error "Source ~a not available." source))
+
 
 (defmethod download-source (source output-location)
   (error "Source ~a not available." source))
